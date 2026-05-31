@@ -1,0 +1,137 @@
+-- 用户表
+CREATE TABLE `Users` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `Username` VARCHAR(50) NOT NULL COMMENT '登录账号，唯一',
+  `PasswordHash` VARCHAR(256) NOT NULL COMMENT '密码哈希值',
+  `Nickname` VARCHAR(50) NULL DEFAULT NULL COMMENT '用户昵称',
+  `Avatar` VARCHAR(500) NULL DEFAULT NULL COMMENT '头像URL',
+  `Gender` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '性别：0未知 1男 2女',
+  `Phone` VARCHAR(20) NULL DEFAULT NULL COMMENT '手机号',
+  `Email` VARCHAR(100) NULL DEFAULT NULL COMMENT '邮箱',
+  `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `IsDeleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '软删除标记',
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UK_Users_Username` (`Username`),
+  UNIQUE KEY `UK_Users_Phone` (`Phone`),
+  UNIQUE KEY `UK_Users_Email` (`Email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户表';
+
+-- 分类表
+CREATE TABLE `Categories` (
+  `Id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `Name` VARCHAR(50) NOT NULL COMMENT '分类名称，如玫瑰、百合',
+  `Icon` VARCHAR(200) NULL DEFAULT NULL COMMENT '图标URL或类名',
+  `SortOrder` INT NOT NULL DEFAULT 0 COMMENT '排序权重',
+  `IsActive` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='鲜花分类表';
+
+-- 鲜花商品表
+CREATE TABLE `Flowers` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `CategoryId` INT UNSIGNED NOT NULL COMMENT '所属分类',
+  `Name` VARCHAR(100) NOT NULL COMMENT '鲜花名称',
+  `FlowerLanguage` VARCHAR(200) NULL DEFAULT NULL COMMENT '花语',
+  `Description` TEXT NULL COMMENT '适用人群/场景说明',
+  `DeliveryDesc` VARCHAR(500) NULL DEFAULT NULL COMMENT '配送说明',
+  `MainImage` VARCHAR(500) NOT NULL COMMENT '列表封面图URL',
+  `ImagesJson` JSON NOT NULL COMMENT '详情图JSON数组，如 [{"url":"","sort":0}]',
+  `PriceOptionsJson` JSON NOT NULL COMMENT '价格档位JSON数组，如 [{"quantity":1,"label":"1束","price":9.00}]',
+  `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+  `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Flowers_CategoryId` (`CategoryId`),
+  KEY `IX_Flowers_IsActive` (`IsActive`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='鲜花商品表';
+
+-- 库存表
+CREATE TABLE `FlowerInventories` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `FlowerId` BIGINT UNSIGNED NOT NULL COMMENT '关联鲜花',
+  `StockQuantity` INT NOT NULL DEFAULT 0 COMMENT '总入库库存',
+  `AvailableQuantity` INT NOT NULL DEFAULT 0 COMMENT '可用库存（下单从这里扣）',
+  `LockedQuantity` INT NOT NULL DEFAULT 0 COMMENT '已下单未支付锁定库存',
+  `SoldQuantity` INT NOT NULL DEFAULT 0 COMMENT '累计销量',
+  `LastUpdated` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UK_FlowerInventories_FlowerId` (`FlowerId`),
+  CONSTRAINT `FK_FlowerInventories_Flowers` FOREIGN KEY (`FlowerId`) REFERENCES `Flowers` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='鲜花库存表';
+
+-- 用户地址表
+CREATE TABLE `UserAddresses` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `UserId` BIGINT UNSIGNED NOT NULL,
+  `ReceiverName` VARCHAR(50) NOT NULL COMMENT '收货人',
+  `Phone` VARCHAR(20) NOT NULL COMMENT '收货电话',
+  `Province` VARCHAR(50) NULL DEFAULT NULL,
+  `City` VARCHAR(50) NULL DEFAULT NULL,
+  `District` VARCHAR(50) NULL DEFAULT NULL,
+  `DetailAddress` VARCHAR(200) NOT NULL COMMENT '详细地址',
+  `IsDefault` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认地址',
+  `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Id`),
+  KEY `IX_UserAddresses_UserId` (`UserId`),
+  CONSTRAINT `FK_UserAddresses_Users` FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户收货地址表';
+
+-- 购物车表
+CREATE TABLE `CartItems` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `UserId` BIGINT UNSIGNED NOT NULL,
+  `FlowerId` BIGINT UNSIGNED NOT NULL,
+  `SelectedOptionQty` INT NOT NULL DEFAULT 1 COMMENT '选中的价格档位数量（如1束/3束/10束）',
+  `Count` INT NOT NULL DEFAULT 1 COMMENT '购买份数',
+  `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UK_CartItems_User_Flower_Option` (`UserId`, `FlowerId`, `SelectedOptionQty`),
+  KEY `IX_CartItems_FlowerId` (`FlowerId`),
+  CONSTRAINT `FK_CartItems_Users` FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE,
+  CONSTRAINT `FK_CartItems_Flowers` FOREIGN KEY (`FlowerId`) REFERENCES `Flowers` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='购物车表';
+
+-- 订单主表
+CREATE TABLE `Orders` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `OrderNo` VARCHAR(32) NOT NULL COMMENT '订单编号，业务唯一',
+  `UserId` BIGINT UNSIGNED NOT NULL,
+  `Status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0待付款 1已付款 2已发货 3已完成 4已取消',
+  `TotalAmount` DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT '订单总金额',
+  `ReceiverName` VARCHAR(50) NOT NULL COMMENT '收货人（地址快照）',
+  `ReceiverPhone` VARCHAR(20) NOT NULL COMMENT '收货电话（快照）',
+  `ReceiverAddress` VARCHAR(500) NOT NULL COMMENT '完整收货地址（快照）',
+  `DeliveryDate` DATETIME NULL DEFAULT NULL COMMENT '配送日期',
+  `DeliveryTimeSlot` VARCHAR(20) NULL DEFAULT NULL COMMENT '配送时段',
+  `CardMessage` VARCHAR(500) NULL DEFAULT NULL COMMENT '贺卡留言',
+  `Remark` VARCHAR(500) NULL DEFAULT NULL COMMENT '用户备注',
+  `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `PaidAt` DATETIME NULL DEFAULT NULL,
+  `ShippedAt` DATETIME NULL DEFAULT NULL,
+  `CompletedAt` DATETIME NULL DEFAULT NULL,
+  `CancelledAt` DATETIME NULL DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UK_Orders_OrderNo` (`OrderNo`),
+  KEY `IX_Orders_UserId` (`UserId`),
+  KEY `IX_Orders_Status` (`Status`),
+  CONSTRAINT `FK_Orders_Users` FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='订单表';
+
+-- 订单明细表
+CREATE TABLE `OrderItems` (
+  `Id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `OrderId` BIGINT UNSIGNED NOT NULL,
+  `FlowerId` BIGINT UNSIGNED NOT NULL,
+  `FlowerName` VARCHAR(100) NOT NULL COMMENT '商品名称快照',
+  `FlowerImage` VARCHAR(500) NULL DEFAULT NULL COMMENT '商品图片快照',
+  `PriceOptionSnapshot` JSON NULL COMMENT '价格档位快照',
+  `Quantity` INT NOT NULL DEFAULT 1 COMMENT '购买数量',
+  `UnitPrice` DECIMAL(18,2) NOT NULL COMMENT '成交单价',
+  `SubTotal` DECIMAL(18,2) NOT NULL COMMENT '小计金额',
+  PRIMARY KEY (`Id`),
+  KEY `IX_OrderItems_OrderId` (`OrderId`),
+  KEY `IX_OrderItems_FlowerId` (`FlowerId`),
+  CONSTRAINT `FK_OrderItems_Orders` FOREIGN KEY (`OrderId`) REFERENCES `Orders` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='订单明细表';
